@@ -175,8 +175,15 @@ export function getLinksForMatches(
     })
     .flat(1);
 
+  if (manifest.rootAssets.cssModules !== undefined) {
+    descriptors = Array.prototype.concat.call(
+      [{ rel: "stylesheet", href: manifest.rootAssets.cssModules }],
+      descriptors
+    );
+  }
+
   let preloads = getCurrentPageModulePreloadHrefs(matches, manifest);
-  return dedupe(descriptors, preloads);
+  return dedupe([...descriptors], preloads);
 }
 
 export async function prefetchStyleLinks(

@@ -512,19 +512,6 @@ export function Links() {
   );
 }
 
-/**
- * Renders the `<link>` tags for the current routes.
- */
-function CssModulesLink() {
-  let { manifest } = useRemixEntryContext();
-  if (manifest.rootAssets.cssModules) {
-    return <link rel="stylesheet" href={manifest.rootAssets.cssModules} />;
-  }
-  return null;
-}
-
-export { CssModulesLink as unstable_CssModulesLink };
-
 export function PrefetchPageLinks({
   page,
   ...dataLinkProps

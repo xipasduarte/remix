@@ -8,7 +8,8 @@ import {
   ScrollRestoration,
   useCatch,
   useLoaderData,
-  useMatches
+  useMatches,
+  unstable_CssModulesLink as CssModulesLink
 } from "remix";
 import normalizeHref from "@exampledev/new.css/new.css";
 
@@ -51,6 +52,7 @@ export default function Root() {
       <head>
         <meta charSet="utf-8" />
         <Meta />
+        <CssModulesLink />
         <Links />
       </head>
       <body className="m-4">

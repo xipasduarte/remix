@@ -37,7 +37,8 @@ export {
   useActionData,
   useBeforeUnload,
   useMatches,
-  RemixServer
+  RemixServer,
+  unstable_CssModulesLink
 } from "@remix-run/react";
 
 // react-router-dom exports

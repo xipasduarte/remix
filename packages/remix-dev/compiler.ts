@@ -10,6 +10,7 @@ import type { RemixConfig } from "./config";
 import { readConfig } from "./config";
 import invariant from "./invariant";
 import { warnOnce } from "./warnings";
+import type { RootAssets } from "./compiler/assets";
 import { createAssetsManifest } from "./compiler/assets";
 import { getAppDependencies } from "./compiler/dependencies";
 import { loaders, getLoaderForFile } from "./compiler/loaders";
@@ -246,10 +247,16 @@ function isEntryPoint(config: RemixConfig, file: string) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+interface BrowserBuildResult extends esbuild.BuildResult {
+  rootAssets: RootAssets;
+}
+
+type ServerBuildResult = esbuild.BuildResult;
+
 async function buildEverything(
   config: RemixConfig,
   options: Required<BuildOptions> & { incremental?: boolean }
-): Promise<(esbuild.BuildResult | undefined)[]> {
+): Promise<[BrowserBuildResult | undefined, ServerBuildResult | undefined]> {
   let cssModulesContent = "";
   let cssHashSource = "";
   function handleProcessedCss(args: { css: string; hash: string }) {
@@ -273,24 +280,40 @@ async function buildEverything(
     );
     let serverBuildPromise = createServerBuild(config, options);
 
+    let supportsCssModules = config.unstable_cssModules === true;
+    let cssModuleHash = getHash(cssHashSource).slice(0, 8).toUpperCase();
+    let cssModuleFilePath = path.resolve(
+      config.assetsBuildDirectory,
+      `__modules.css`
+    );
+
     return await Promise.all([
       browserBuildPromise.then(async build => {
         let cssModulePromise: Promise<any> | null = null;
-        if (config.unstable_cssModules === true && cssModulesContent) {
-          let filePath = path.resolve(
-            config.assetsBuildDirectory,
-            `__modules.css`
+        if (supportsCssModules && cssModulesContent) {
+          cssModuleFilePath = cssModuleFilePath.replace(
+            /\.css$/,
+            `-${cssModuleHash}.css`
           );
-          let hash = getHash(cssHashSource).slice(0, 8).toUpperCase();
-          filePath = filePath.replace(/\.css$/, `-${hash}.css`);
-          cssModulePromise = fse.writeFile(filePath, cssModulesContent);
+          cssModulePromise = fse.writeFile(
+            cssModuleFilePath,
+            cssModulesContent
+          );
         }
+
+        let rootAssets: RootAssets = {
+          cssModules: cssModuleFilePath
+        };
 
         await Promise.all([
           cssModulePromise,
-          generateManifests(config, build.metafile!)
+          generateManifests(config, build.metafile!, rootAssets)
         ]);
-        return build;
+
+        return {
+          ...build,
+          rootAssets
+        };
       }),
       serverBuildPromise
     ]);
@@ -304,7 +327,7 @@ async function createBrowserBuild(
   config: RemixConfig,
   options: BuildOptions & { incremental?: boolean },
   handleProcessedCss: (args: { css: string; hash: string }) => void
-): Promise<esbuild.BuildResult> {
+): Promise<BrowserBuildResult> {
   // For the browser build, exclude node built-ins that don't have a
   // browser-safe alternative installed in node_modules. Nothing should
   // *actually* be external in the browser build (we want to bundle all deps) so
@@ -333,7 +356,7 @@ async function createBrowserBuild(
       path.resolve(config.appDirectory, config.routes[id].file) + "?browser";
   }
 
-  return esbuild.build({
+  let build = await esbuild.build({
     entryPoints,
     outdir: config.assetsBuildDirectory,
     platform: "browser",
@@ -362,6 +385,13 @@ async function createBrowserBuild(
       emptyModulesPlugin(config, /\.server(\.[jt]sx?)?$/)
     ]
   });
+
+  return {
+    ...build,
+    rootAssets: {
+      cssModules: undefined
+    }
+  };
 }
 
 async function createServerBuild(
@@ -457,9 +487,10 @@ function getNpmPackageName(id: string): string {
 
 async function generateManifests(
   config: RemixConfig,
-  metafile: esbuild.Metafile
+  metafile: esbuild.Metafile,
+  rootAssets?: RootAssets
 ): Promise<string[]> {
-  let assetsManifest = await createAssetsManifest(config, metafile);
+  let assetsManifest = await createAssetsManifest(config, metafile, rootAssets);
 
   let filename = `manifest-${assetsManifest.version.toUpperCase()}.js`;
   assetsManifest.url = config.publicPath + filename;

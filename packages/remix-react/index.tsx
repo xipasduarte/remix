@@ -37,7 +37,8 @@ export {
   useLoaderData,
   useActionData,
   useBeforeUnload,
-  useMatches
+  useMatches,
+  unstable_CssModulesLink
 } from "./components";
 
 export type { FormMethod, FormEncType } from "./data";
